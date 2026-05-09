@@ -32,4 +32,4 @@ while True:
     else:
         print("Batna still closed...")
         notified = False
-    time.sleep(300)
+    time.sleep(10)
