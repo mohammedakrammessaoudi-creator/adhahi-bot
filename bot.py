@@ -1,13 +1,25 @@
 import requests
 import time
 import threading
+import json
+import os
 from bs4 import BeautifulSoup
 
 TOKEN = "8627534186:AAHgbxBR8N8WXZeaeIXC7yL05OSlXs6gnKk"
-CHAT_ID = "6772308497"
 URL = "https://adhahi.dz/register"
+USERS_FILE = "users.json"
 
-batna_open = False
+def load_users():
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+def save_users(users):
+    with open(USERS_FILE, "w") as f:
+        json.dump(users, f)
+
+users = load_users()
 
 def check_batna():
     try:
@@ -24,6 +36,10 @@ def send_message(chat_id, text):
     requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage",
                  params={"chat_id": chat_id, "text": text})
 
+def broadcast(text):
+    for uid in users:
+        send_message(uid, text)
+
 def get_updates(offset=None):
     params = {"timeout": 30}
     if offset:
@@ -35,6 +51,7 @@ def get_updates(offset=None):
         return {}
 
 def listen_messages():
+    global users
     offset = None
     while True:
         updates = get_updates(offset)
@@ -43,21 +60,28 @@ def listen_messages():
             msg = update.get("message", {})
             text = msg.get("text", "")
             chat_id = msg.get("chat", {}).get("id")
-            if text == "/status":
-                if batna_open:
+            if not chat_id:
+                continue
+            if text == "/start":
+                if chat_id not in users:
+                    users.append(chat_id)
+                    save_users(users)
+                send_message(chat_id, "أهلاً! ✅ تسجلت في التنبيهات\nراح يجيك إشعار فوري كي تفتح باتنة 🚨")
+            elif text == "/status":
+                if check_batna():
                     send_message(chat_id, "🟢 باتنة فتحت التسجيل!")
                 else:
                     send_message(chat_id, "🔴 باتنة مزال مغلق")
+            else:
+                send_message(chat_id, "أهلاً! 👋\nابعث /start باش تتسجل في التنبيهات\nابعث /status باش تشوف حالة باتنة")
 
 def monitor():
-    global batna_open
     notified = False
     while True:
-        batna_open = check_batna()
-        if batna_open and not notified:
-            send_message(CHAT_ID, "🚨 باتنة فتحت التسجيل! سجل دروك: https://adhahi.dz/register")
+        if check_batna() and not notified:
+            broadcast("🚨 باتنة فتحت التسجيل! سجل دروك: https://adhahi.dz/register")
             notified = True
-        elif not batna_open:
+        elif not check_batna():
             notified = False
         time.sleep(10)
 
