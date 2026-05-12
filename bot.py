@@ -1,35 +1,52 @@
+import telebot
 import requests
+from bs4 import BeautifulSoup
 import time
-from src.config import TELEGRAM_TOKEN, CHAT_ID
 
-def attempt_registration(user_id, appointment_date):
-    """
-    هذه الدالة هي 'الهجوم'؛ ترسل طلب تسجيل للسيت وتتأكد إذا تم قبولك
-    """
-    url = "https://aid.dz/api/register"  # مثال لرابط التسجيل
-    payload = {
-        "user_id": user_id,
-        "date": appointment_date
-    }
-    
+# --- الإعدادات (الكونفيغ) ---
+TOKEN = "123456789:ABCdefGHIjkl"  # حط هنا التوكن تاعك اللي عطاهولك BotFather
+URL = "https://adhahi.dz/register" # هذا هو الرابط اللي يخلي البوت يعرف السيت
+MY_CHAT_ID = "12345678"            # حط هنا الـ ID تاعك باش يبعثلك الإشعار
+
+bot = telebot.TeleBot(TOKEN)
+
+def check_batna():
     try:
-        response = requests.post(url, json=payload, timeout=5)
-        if response.status_code == 201: # إذا رجع السيت كود 201 يعني نجحت
-            return True
-    except Exception as e:
-        print(f"Error during attack: {e}")
-    
-    return False
+        response = requests.get(URL)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        # هنا البوت يحوس على كلمة "باتنة" في الجدول تاع السيت
+        rows = soup.find_all('tr')
+        for row in rows:
+            if "باتنة" in row.text:
+                if "مفتوحة" in row.text:
+                    return True # باتنة فتحت!
+                else:
+                    return False # باتنة مازالها مغلقة
+    except:
+        return None # صرا مشكل في الكونيكسيون
 
-def attack_loop():
-    """
-    حلقة الهجوم: لا تتوقف عن المحاولة حتى يفتح السيت أو ينجح التسجيل
-    """
-    print("🚀 بدء الهجوم على سيت الأضاحي...")
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    bot.reply_to(message, "أهلا برو! راني نراقب في موقع الأضاحي على جال باتنة 🐑")
+
+@bot.message_handler(commands=['status'])
+def send_status(message):
+    if check_batna():
+        bot.reply_to(message, "✅ باتنة راهي مفتوحة! أزرب سجل!")
+    else:
+        bot.reply_to(message, "❌ باتنة مازالت مغلقة.. اصبر شوية.")
+
+# حلقة المراقبة (تخدم في الخلفية)
+def monitor():
     while True:
-        if attempt_registration("123456789", "2026-06-01"):
-            print("✅ تم التسجيل بنجاح! توقف عن الهجوم.")
-            break
-        else:
-            print("❌ السيت مازال مغلق، إعادة المحاولة بعد 5 ثواني...")
-            time.sleep(5)
+        if check_batna():
+            bot.send_message(MY_CHAT_ID, "🚨 برووو! باتنة فتحت! أدخل سجل فوراً: " + URL)
+            # كي تفتح باتنة، نحبسوا المراقبة مؤقتاً أو نخلوها كل ساعة
+            time.sleep(3600)
+        time.sleep(10) # يشيك كل 10 ثواني
+
+# باش يخدم المونيتور مع البوت في Glitch
+import threading
+threading.Thread(target=monitor).start()
+
+bot.polling()
